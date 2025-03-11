@@ -18,12 +18,8 @@ type layerConfig struct {
 	Digest v1.Hash
 }
 
-func (lc layerConfig) String() string {
-	return fmt.Sprintf("Size: %s, Digest: %s", lc.Size, lc.Digest)
-}
-
 func main() {
-	if len(os.Args) != 3 {
+	if len(os.Args) < 2 {
 		fmt.Println("Usage: download-layer <image> <output-file>")
 		os.Exit(1)
 	}
@@ -34,10 +30,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	outFileName := os.Args[2]
-	if outFileName == "" {
-		fmt.Println("Error: output file is required.")
-		os.Exit(1)
+	outFileName := ""
+	if len(os.Args) > 2 {
+		outFileName = os.Args[2]
 	}
 
 	ref, err := name.ParseReference(imageRef)
@@ -58,27 +53,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	layers := map[int]layerConfig{}
-	for i, layer := range manifest.Layers {
-		layers[i] = layerConfig{
-			Size:   humanize.Bytes(uint64(layer.Size)),
+	layers := map[string]layerConfig{}
+	for _, layer := range manifest.Layers {
+		hmb := humanize.Bytes(uint64(layer.Size))
+		layers[fmt.Sprintf("Size: %s, Digest: %s", hmb, layer.Digest)] = layerConfig{
 			Digest: layer.Digest,
+			Size:   hmb,
 		}
 	}
 
 	prompt := promptui.Select{
 		Label: "Layer",
-		Items: layerConfigDescription(layers),
+		Items: mapKeys(layers),
 		Size:  10,
 	}
-	idx, _, err := prompt.Run()
+	_, ly, err := prompt.Run()
 	if err != nil {
 		fmt.Println("Error selecting layer:", err)
 		os.Exit(1)
 	}
-	sl := layers[idx]
 
-	selectedLayer, err := img.LayerByDigest(sl.Digest)
+	selectedLayer, err := img.LayerByDigest(layers[ly].Digest)
 	if err != nil {
 		fmt.Println("Error fetching selected layer:", err)
 		os.Exit(1)
@@ -91,26 +86,29 @@ func main() {
 	}
 	defer layerReader.Close()
 
-	outputFile, err := os.Create(outFileName)
-	if err != nil {
-		fmt.Println("Error creating output file:", err)
-		os.Exit(1)
-	}
-	defer outputFile.Close()
+	if outFileName != "" {
+		outputFile, err := os.OpenFile(outFileName, os.O_CREATE|os.O_WRONLY, 0664)
+		if err != nil {
+			fmt.Println("Error creating output file:", err)
+			os.Exit(1)
+		}
+		defer outputFile.Close()
 
-	_, err = io.Copy(outputFile, layerReader)
-	if err != nil {
-		fmt.Println("Error writing to output file:", err)
-		os.Exit(1)
+		_, err = io.Copy(outputFile, layerReader)
+		if err != nil {
+			fmt.Println("Error writing to output file:", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Image %s Layer %s with size %s downloaded successfully to %s\n", imageRef, layers[ly].Digest, layers[ly].Size, outFileName)
+		return
 	}
-
-	fmt.Printf("Image %s Layer %s with size %s downloaded successfully to %s\n", imageRef, sl.Digest, sl.Size, outFileName)
+	fmt.Printf("Image %s Layer %s with size %s downloaded successfully\n", imageRef, layers[ly].Digest, layers[ly].Size)
 }
 
-func layerConfigDescription(m map[int]layerConfig) []string {
+func mapKeys(m map[string]layerConfig) []string {
 	keys := make([]string, 0, len(m))
-	for _, v := range m {
-		keys = append(keys, v.String())
+	for k := range m {
+		keys = append(keys, k)
 	}
 	return keys
 }

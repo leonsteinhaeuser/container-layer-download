@@ -5,10 +5,10 @@ This CLI tool allows you to download a single layer from a container image. This
 ## How to use
 
 ```bash
-cld <image> <output-file>
+cld <image> <output-file (optional)>
 ```
 
-The interactive CLI provides a list of layers in the container image. From this list, you can select the layer you want to download. The layer is saved to the output file.
+The interactive CLI provides a list of layers in the container image. From this list, you can select the layer you want to download. The layer is saved to the output file. If the output file is not provided, the layer is **not** saved to disk.
 
 ### Example
 
